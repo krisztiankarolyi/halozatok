@@ -180,7 +180,8 @@ def start_server(host, port):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((host, port))
         server_socket.listen()
-        print(f"Chat szerver elindult a {host}:{port} címen.")
+        ip = socket.gethostbyname(socket.gethostname())
+        print(f"Chat szerver elindult a(z) {ip}:{port} címen.")
 
         while True:
             client_socket, client_address = server_socket.accept()
