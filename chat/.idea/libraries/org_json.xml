@@ -4,6 +4,7 @@
       <root url="jar://$PROJECT_DIR$/lib/org.json.jar!/" />
       <root url="jar://$PROJECT_DIR$/lib/json.jar!/" />
       <root url="jar://$PROJECT_DIR$/lib/javax.json-1.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/miglayout-4.0.jar!/" />
     </CLASSES>
     <JAVADOC />
     <SOURCES />
