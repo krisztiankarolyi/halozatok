@@ -19,7 +19,7 @@ public class chatGUI  extends JFrame{
     private JTextField messageField;
     private JTextArea chatArea;
     private Socket clientSocket;
-    private Font font = new Font("MONOSPACED", Font.PLAIN, 18);
+    private Font font = new Font("MONOSPACED", Font.PLAIN, 16);
 
 
     public chatGUI(String host, int port) {
@@ -52,7 +52,8 @@ public class chatGUI  extends JFrame{
         sendButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                sendMessageFromTextField();
+                if(!messageField.getText().trim().equals(""))
+                    sendMessageFromTextField();
             }
         });
 
@@ -60,7 +61,8 @@ public class chatGUI  extends JFrame{
             @Override
             public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-                    sendMessageFromTextField();
+                    if(!messageField.getText().trim().equals(""))
+                         sendMessageFromTextField();
                 }
             }
         });
@@ -176,15 +178,27 @@ public class chatGUI  extends JFrame{
             String time = jsonObject.getString("timestamp");
 
             if ("server".equals(messageType)) {
-                if (content.contains("felhasználók")) {
+                if(content.contains("Aktív")) {
                     updateUsersList(content);
+                }
+
+                else if(content.contains("csatlakozott")) {
+                    requestUserList();
+                    appendToChatArea("[SZERVER] | " + time + ": " + content);
+                }
+                else if(content.contains("kilépett")) {
+                    requestUserList();
                 }
                 else {
                     appendToChatArea("[SZERVER] | " + time + ": " + content);
                 }
-            } else if ("public".equals(messageType)) {
+
+            }
+            else if ("public".equals(messageType))
+            {
                 appendToChatArea("<" + sender + "> | " + time + ": " + content);
-            } else if ("private".equals(messageType)) {
+            }
+            else if ("private".equals(messageType)) {
                 appendToChatArea("[Privát] küldte: <" + sender + "> | " + time + ": " + content);
             }
         } catch (Exception e) {
@@ -235,6 +249,7 @@ public class chatGUI  extends JFrame{
     }
 
     private void appendToChatArea(String message) {
+
         chatArea.append(message + "\n");
     }
 
@@ -244,6 +259,9 @@ public class chatGUI  extends JFrame{
             String message = String.format("{\"message_type\":\"%s\",\"content\":\"%s\",\"timestamp\":\"%s\",\"sender\":\"%s\",\"receiver\":\"%s\"}",
                     messageType, content, timestamp, sender, receiver);
 
+            if(content.contains("@newName")){
+                userName = content.split("@newName")[1];
+            }
             PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
             out.println(message);
             messageField.setText("");

@@ -1,0 +1,12 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="chat:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/chat_jar</output-path>
+    <root id="archive" name="chat.jar">
+      <element id="module-output" name="chat" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/org.json.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/json.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/javax.json-1.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/miglayout-4.0.jar" path-in-jar="/" />
+    </root>
+  </artifact>
+</component>
