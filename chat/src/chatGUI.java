@@ -7,6 +7,8 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import javax.json.*;
+import javax.swing.text.*;
+
 import net.miginfocom.swing.MigLayout;
 
 public class chatGUI  extends JFrame{
@@ -17,7 +19,7 @@ public class chatGUI  extends JFrame{
 
     private String userName = "";
     private JTextField messageField;
-    private JTextArea chatArea;
+    private JTextPane chatArea;
     private Socket clientSocket;
     private Font font = new Font("MONOSPACED", Font.PLAIN, 16);
 
@@ -32,13 +34,15 @@ public class chatGUI  extends JFrame{
         setTitle("Chat Client");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(800, 600);
+        setMinimumSize(new Dimension(800, 600));
         setLocationRelativeTo(null);
         getContentPane().setBackground(Color.DARK_GRAY);
         getContentPane().setForeground(Color.WHITE);
         getContentPane().setFont(font);
 
         messageField = new JTextField();
-        chatArea = new JTextArea();
+        chatArea = new JTextPane();
+
         chatArea.setEditable(false);
 
         messageField.setBackground(Color.DARK_GRAY);
@@ -48,7 +52,11 @@ public class chatGUI  extends JFrame{
         chatArea.setFont(font);
         messageField.setFont(font);
 
-        JButton sendButton = new JButton("Send");
+        ImageIcon sendIcon = new ImageIcon(getClass().getResource("/res/send.png"));
+        JButton sendButton = new JButton("", sendIcon);
+        sendButton.setBackground(Color.DARK_GRAY);
+        sendButton.setBorder(null);
+
         sendButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -75,7 +83,7 @@ public class chatGUI  extends JFrame{
 
         JScrollPane userListScrollPane = new JScrollPane(userList);
 
-        JButton refreshButton = new JButton("Refresh");
+        JButton refreshButton = new JButton("Refresh users list");
         refreshButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -96,7 +104,7 @@ public class chatGUI  extends JFrame{
             }
         });
 
-        setLayout(new MigLayout("fill", "[75%][25%]", "[75%, grow][25%, grow]"));
+        setLayout(new MigLayout("fill", "[90%][10%]", "[90%, grow][10%, grow]"));
 
         add(new JScrollPane(chatArea), "cell 0 0, grow");
         add(userListScrollPane, "cell 1 0, grow");
@@ -178,39 +186,28 @@ public class chatGUI  extends JFrame{
             String time = jsonObject.getString("timestamp");
 
             if ("server".equals(messageType)) {
-
-                if(content.contains("Aktív")) {
                     updateUsersList(content);
+
+                    appendToChatArea("[SZERVER] | " + time + ": " + content, Color.orange);
                 }
 
-                else if(content.contains("csatlakozott")) {
-                    requestUserList();
-                    appendToChatArea("[SZERVER] | " + time + ": " + content);
-                }
-                else if(content.contains("kilépett")) {
-                    requestUserList();
-                }
-                else if(content.contains("megváltozott")) {
-                    requestUserList();
-                    appendToChatArea("[SZERVER] | " + time + ": " + content);
-                }
-                else {
-                    appendToChatArea("[SZERVER] | " + time + ": " + content);
-                }
 
-            }
             else if ("public".equals(messageType))
             {
                 appendToChatArea("<" + sender + "> | " + time + ": " + content);
             }
             else if ("private".equals(messageType)) {
-                appendToChatArea("[Privát] küldte: <" + sender + "> | " + time + ": " + content);
+                appendToChatArea("[Privát] küldte: <" + sender + "> | " + time + ": " + content, Color.red);
             }
         } catch (Exception e) {
             appendToChatArea("Hiba a JSON üzenet feldolgozása során.");
             e.printStackTrace();
         }
     }
+
+    /*
+    * Ha olyan szervezüzenet jön, ami érini a felhasználók listáját, akkor frissítse azt
+     */
 
 
     private void sendMessageFromTextField() {
@@ -253,9 +250,40 @@ public class chatGUI  extends JFrame{
         appendToChatArea("@exit - Kilépés a chatről+ \n @help - Elérhető parancsok listázása \n @users - Aktív felhasználók listázása \n \"@newName [új név] - Felhasználónév megváltoztatása\"");
     }
 
-    private void appendToChatArea(String message) {
 
-        chatArea.append(message + "\n");
+    private void appendToChatArea( String msg)
+    {
+        Color c = Color.white;
+        SwingUtilities.invokeLater(() -> {
+            StyledDocument doc = chatArea.getStyledDocument();
+            SimpleAttributeSet style = new SimpleAttributeSet();
+            StyleConstants.setForeground(style, c);
+            StyleConstants.setFontFamily(style, "Lucida Console");
+            StyleConstants.setAlignment(style, StyleConstants.ALIGN_JUSTIFIED);
+
+            try {
+                doc.insertString(doc.getLength(), msg+"\n", style);
+                chatArea.setCaretPosition(doc.getLength());
+            } catch (BadLocationException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+    private void appendToChatArea(String msg, Color c) {
+        SwingUtilities.invokeLater(() -> {
+            StyledDocument doc = chatArea.getStyledDocument();
+            SimpleAttributeSet style = new SimpleAttributeSet();
+            StyleConstants.setForeground(style, c);
+            StyleConstants.setFontFamily(style, "Lucida Console");
+            StyleConstants.setAlignment(style, StyleConstants.ALIGN_JUSTIFIED);
+
+            try {
+                doc.insertString(doc.getLength(), msg+"\n", style);
+                chatArea.setCaretPosition(doc.getLength());
+            } catch (BadLocationException e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     private void sendMessage(Socket clientSocket, String messageType, String content, String sender, String receiver) {

@@ -72,14 +72,15 @@ class MessageRouter:
 
     def private_message(self, message: Message):
         success = False
+       
         for user in self.users:
             try:
                 if user.name == message.receiver:
                     user.send_message(message)
                     success = True
 
-                if user.name == message.sender:
-                    user.send_message(Message("private", "A privát üzenet sikeresen kézbesítve", datetime.datetime.now(), "[SZERVER]", message.sender))
+                if user.name == message.sender and success:
+                    user.send_message(Message("SERVER", "A privát üzenet sikeresen kézbesítve", datetime.datetime.now(), "[SZERVER]", message.sender))
             except Exception as e:
                 print(e)
 
@@ -88,7 +89,7 @@ class MessageRouter:
             sender = self.getUserByName(senderName)
             error_message = Message("private",
                                     "Hiba: a címzett ("+message.receiver+
-                                    ") nem található!", datetime.datetime.now(), "server", senderName)
+                                    ") nem található!", datetime.datetime.now(), "[SZERVER]", senderName)
             sender.send_message(error_message)
 
     def getUserByName(self, name)-> User:
@@ -132,8 +133,12 @@ def handle_client(conn, addr, router):
                     handle_user_disconnect(user, conn, router)
                     break
 
-                if msg.message_type == 'private':                
-                    router.private_message(msg)
+                if msg.message_type == 'private':           
+                    if msg.sender != msg.receiver:
+                        router.private_message(msg)
+                    else:
+                        router.private_message(Message("private",
+                                    "Hiba: Magadnak nem küldhetsz privát üzenetet! :) ", datetime.datetime.now(), "[SZERVER]", msg.sender))
 
                 elif msg.content == "@users":
                     active_users = [user.name for user in router.users]
