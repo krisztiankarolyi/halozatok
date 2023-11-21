@@ -178,6 +178,7 @@ public class chatGUI  extends JFrame{
             String time = jsonObject.getString("timestamp");
 
             if ("server".equals(messageType)) {
+
                 if(content.contains("Aktív")) {
                     updateUsersList(content);
                 }
@@ -188,6 +189,10 @@ public class chatGUI  extends JFrame{
                 }
                 else if(content.contains("kilépett")) {
                     requestUserList();
+                }
+                else if(content.contains("megváltozott")) {
+                    requestUserList();
+                    appendToChatArea("[SZERVER] | " + time + ": " + content);
                 }
                 else {
                     appendToChatArea("[SZERVER] | " + time + ": " + content);
