@@ -3,7 +3,7 @@ import random
 import socket
 import threading
 import datetime
-
+import mysql.connector
 
 class Message:
     def __init__(self, message_type, content, timestamp ,sender, receiver):
@@ -35,8 +35,6 @@ class Message:
 
         return cls(message_type, content, timestamp, sender, receiver)
 
-
-
     
 class User:
     def __init__(self, name, router, conn):
@@ -51,11 +49,29 @@ class User:
         if self.conn and self.conn.fileno() != -1:
             self.conn.send(message.encode('utf-8'))
 
-        
 
 class MessageRouter:
+    sqlConnection = ""
+    cursor = ""
+
     def __init__(self):
         self.users = []
+        self.connectSQL()
+    
+    
+    def connectSQL(self):
+        try:
+            self.sqlConnection = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="",
+            database="chatServer" )
+
+            if(self.sqlConnection):
+                self.cursor = self.sqlConnection.cursor()
+                print("A MySQL adatbázisra sikeresen csatlakozva - üzenetek mentése menni fog. ")
+        except:
+            print("A MySQL adatbázisra való csatlakozás sikertelen - az üzenetek nem lesznek elmentve! ")
 
     def add_user(self, user: User):
         try:
@@ -67,6 +83,12 @@ class MessageRouter:
         for user in self.users:
             try:
                 user.send_message(message)
+                if(self.cursor != "" and str.lower(message.message_type) != "sever" and  str.lower(message.sender) != "server"):
+                    sql = "INSERT INTO messages (type, content, sender, receiver) VALUES (%s, %s, %s, %s)"
+                    values = (message.message_type, message.content, message.sender, message.receiver)
+                    self.cursor.execute(sql, values)
+                    self.sqlConnection.commit()
+
             except Exception as ex:
                 print(ex)
 
