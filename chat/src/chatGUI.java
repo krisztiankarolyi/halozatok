@@ -3,8 +3,10 @@ import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import javax.json.*;
 import javax.swing.text.*;
@@ -16,17 +18,52 @@ public class chatGUI  extends JFrame{
     private DefaultListModel<String> userListModel;
     private JList<String> userList;
 
-
+    public  boolean connected = false;
     private String userName = "";
     private JTextField messageField;
     private JTextPane chatArea;
     private Socket clientSocket;
+
     private Font font = new Font("MONOSPACED", Font.PLAIN, 16);
 
+    private void connect() {
+        boolean connected = false;
 
-    public chatGUI(String host, int port) {
+        while (!connected) {
+            try {
+                String ip = JOptionPane.showInputDialog("Kérem adja meg az IP-címet:");
+                if (ip == null) { // Ellenőrzi, hogy a felhasználó a Cancel-t választotta-e
+                    System.exit(0); // Kilépés, ha a Cancel-t választotta
+                }
+
+                String portStr = JOptionPane.showInputDialog("Kérem adja meg a portot:");
+                if (portStr == null) { // Ellenőrzi, hogy a felhasználó a Cancel-t választotta-e
+                    System.exit(0); // Kilépés, ha a Cancel-t választotta
+                }
+
+                try {
+                    int port = Integer.parseInt(portStr);
+                    Socket clientSocket = new Socket(ip, port);
+                    connected = clientSocket.isConnected();
+                    if (connected) {
+                        this.clientSocket = clientSocket;
+                        startClient(clientSocket);
+                    }
+
+                } catch (NumberFormatException e) {
+                    JOptionPane.showMessageDialog(null, "Hibás portszám formátum!", "Error", JOptionPane.WARNING_MESSAGE);
+                }
+            } catch (Exception exp) {
+                JOptionPane.showMessageDialog(null, exp.getLocalizedMessage(), "Error", JOptionPane.WARNING_MESSAGE);
+            }
+        }
+    }
+
+
+    public chatGUI() {
+        connect();
         initUI();
-        startClient(host, port);
+        startClient(clientSocket);
         SwingUtilities.invokeLater(this::requestUserList);
     }
 
@@ -97,7 +134,7 @@ public class chatGUI  extends JFrame{
                 if (e.getClickCount() == 1) {
                     JList<String> list = (JList<String>) e.getSource();
                     String selectedUser = list.getSelectedValue();
-                    if (selectedUser != null) {
+                    if (selectedUser != null && messageField != null) {
                         messageField.setText(String.format("@private %s -> ", (selectedUser).trim()));
                     }
                 }
@@ -119,19 +156,25 @@ public class chatGUI  extends JFrame{
     }
 
     private void updateUsersList(String users) {
-        SwingUtilities.invokeLater(() -> {
-            userListModel.clear();
-            String[] userArray = users.split(":")[1].split(",");
-            for (String user : userArray) {
-                userListModel.addElement(user);
-            }
-        });
+        try{
+            SwingUtilities.invokeLater(() -> {
+                if(userListModel != null){
+                    userListModel.clear();
+                    String[] userArray = users.split(":")[1].split(",");
+                    for (String user : userArray) {
+                        userListModel.addElement(user);
+                    }
+                }
+            });
+        }
+        catch(Exception ex){
+            JOptionPane.showMessageDialog(null, ex.getLocalizedMessage(), "Error", JOptionPane.WARNING_MESSAGE);
+        }
+
     }
 
-    private void startClient(String host, int port) {
+    private void startClient(Socket clientSocket) {
         try {
-            clientSocket = new Socket(host, port);
-
             while(userName.replace(" ", "").equals(""))
             {
                 userName = JOptionPane.showInputDialog(this, "Kérjük, adja meg a nevét:", "Bejelentkezés", JOptionPane.PLAIN_MESSAGE);
@@ -140,11 +183,12 @@ public class chatGUI  extends JFrame{
 
             Thread receiveThread = new Thread(() -> receiveMessages(clientSocket));
             receiveThread.start();
+            connected = true;
 
 
-        } catch (IOException e) {
-            appendToChatArea("A kapcsolat megszakadt / sikertelen kapcsolódás.");
-            e.printStackTrace();
+        }
+        catch (Exception e){
+            JOptionPane.showMessageDialog(null, e.getLocalizedMessage(), "Error", JOptionPane.WARNING_MESSAGE);
         }
     }
 
@@ -159,6 +203,15 @@ public class chatGUI  extends JFrame{
 
                 if (bytesRead == -1) {
                     appendToChatArea("A kapcsolat megszakadt / sikertelen kapcsolódás.");
+                    int userChoice = JOptionPane.showConfirmDialog(
+                            this,
+                            "A kapcsolat megszakadt / sikertelen kapcsolódás. Szeretné újraindítani az alkalmazást?",
+                            "Kapcsolat hiba",
+                            JOptionPane.YES_NO_OPTION);
+
+                    if (userChoice == JOptionPane.YES_OPTION) {
+                        restartApplication();
+                    }
                     break;
                 }
 
@@ -173,6 +226,15 @@ public class chatGUI  extends JFrame{
             }
         } catch (IOException e) {
             appendToChatArea("Hiba az üzenetek fogadása közben.");
+            int userChoice = JOptionPane.showConfirmDialog(
+                    this,
+                    "Szeretné újraindítani az alkalmazást?",
+                    "Kapcsolat hiba",
+                    JOptionPane.YES_NO_OPTION);
+
+            if (userChoice == JOptionPane.YES_OPTION) {
+                restartApplication();
+            }
             e.printStackTrace();
         }
     }
@@ -187,7 +249,6 @@ public class chatGUI  extends JFrame{
 
             if ("server".equals(messageType)) {
                     updateUsersList(content);
-
                     appendToChatArea("[SZERVER] | " + time + ": " + content, Color.orange);
                 }
 
@@ -205,14 +266,40 @@ public class chatGUI  extends JFrame{
         }
     }
 
-    /*
-    * Ha olyan szervezüzenet jön, ami érini a felhasználók listáját, akkor frissítse azt
-     */
+    public void restartApplication()
+    {
+        try
+        {
+            final String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
+            final File currentJar = new File(chatGUI.class.getProtectionDomain().getCodeSource().getLocation().toURI());
 
+            if(!currentJar.getName().endsWith(".jar"))
+                return;
+
+            final ArrayList<String> command = new ArrayList<String>();
+            command.add(javaBin);
+            command.add("-jar");
+            command.add(currentJar.getPath());
+            final ProcessBuilder builder = new ProcessBuilder(command);
+            builder.start();
+            System.exit(0);
+        }
+        catch (Exception ex){
+            JOptionPane.showMessageDialog(null, ex.getLocalizedMessage(), "Error", JOptionPane.WARNING_MESSAGE);
+        }
+    }
 
     private void sendMessageFromTextField() {
-        String message = messageField.getText().toString();
-        if(message.toLowerCase().startsWith("@private"))
+        String message = "";
+        if(messageField != null){
+             message = messageField.getText().toString();
+        }
+
+        if(message.toLowerCase().equals("@restart") || message.toLowerCase().equals("@reconnect")){
+            restartApplication();
+        }
+
+        else if(message.toLowerCase().startsWith("@private"))
         {
             String[] parts = message.split(" ", 4);
 
@@ -234,8 +321,8 @@ public class chatGUI  extends JFrame{
         else {
             sendMessage(clientSocket, "public", message, userName, "all");
         }
-
-        messageField.setText("");
+        if(messageField != null)
+         messageField.setText("");
 
     }
 
@@ -297,25 +384,23 @@ public class chatGUI  extends JFrame{
             }
             PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
             out.println(message);
-            messageField.setText("");
+            if(messageField != null)
+                 messageField.setText("");
 
         } catch (IOException e) {
             appendToChatArea("Hiba az üzenet küldése során.");
             e.printStackTrace();
         }
     }
-
     public static void main(String[] args) {
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
-                String ip = JOptionPane.showInputDialog("Kérem adja meg az IP-címet:");
-                String portStr = JOptionPane.showInputDialog("Kérem adja meg a portot:");
-                int port = Integer.parseInt(portStr);
-                new chatGUI(ip, port).setVisible(true);
+                new chatGUI().setVisible(true);
             }
         });
     }
-
-
 }
+
+
+
