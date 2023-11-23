@@ -73,6 +73,16 @@ class MessageRouter:
         except:
             print("A MySQL adatbázisra való csatlakozás sikertelen - az üzenetek nem lesznek elmentve! ")
 
+    def loadPreviousMessages(self, user):
+         if self.cursor != "":
+                sql = "SELECT type, content, sender, receiver, time FROM messages"
+                self.cursor.execute(sql)
+                rows = self.cursor.fetchall()
+                for msg in rows:
+                    msg = Message(msg[0], msg[1], msg[4], msg[2], msg[3])
+                    user.send_message(msg)
+
+
     def add_user(self, user: User):
         try:
             self.users.append(user)
@@ -149,6 +159,7 @@ def handle_client(conn, addr, router):
                     welcome_message = Message('server', user.name +" csatlakozott. Üdv, "+user.name+"!", datetime.datetime.now(), 'server', user.name)
                     router.broadcast_message(welcome_message)
                     print(f"{user.name} has been authenticated")
+                    router.loadPreviousMessages(user)
 
             else:
                 if msg.content == '@exit':

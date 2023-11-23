@@ -2,7 +2,7 @@ import datetime
 import json
 import socket
 import threading
-
+import traceback
 user_name = ""
 
 def print_available_commands():
@@ -48,6 +48,7 @@ def receive_messages(client_socket):
         except Exception as e:
             print("A kapcsolat megsezakadt.")
             print(e)
+            print(traceback.format_exc())
             break
 
 
@@ -96,6 +97,8 @@ def start_client(host, port):
     except Exception as e:
         print("A kapcsolata megszakadt.")
         print(e)
+        print(traceback.format_exc())
+
 
 if __name__ == "__main__":
     host = input("Kérem a kiszolgáló IPv4 címét:\n")
