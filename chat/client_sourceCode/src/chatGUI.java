@@ -6,6 +6,8 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import javax.json.*;
@@ -26,19 +28,20 @@ public class chatGUI  extends JFrame{
 
     private Font font = new Font("MONOSPACED", Font.PLAIN, 16);
 
+
     private void connect() {
         boolean connected = false;
 
         while (!connected) {
             try {
                 String ip = JOptionPane.showInputDialog("Kérem adja meg az IP-címet:");
-                if (ip == null) { // Ellenőrzi, hogy a felhasználó a Cancel-t választotta-e
-                    System.exit(0); // Kilépés, ha a Cancel-t választotta
+                if (ip == null) {
+                    System.exit(0);
                 }
 
                 String portStr = JOptionPane.showInputDialog("Kérem adja meg a portot:");
-                if (portStr == null) { // Ellenőrzi, hogy a felhasználó a Cancel-t választotta-e
-                    System.exit(0); // Kilépés, ha a Cancel-t választotta
+                if (portStr == null) {
+                    System.exit(0);
                 }
 
                 try {
@@ -48,6 +51,7 @@ public class chatGUI  extends JFrame{
                     if (connected) {
                         this.clientSocket = clientSocket;
                         startClient(clientSocket);
+
                     }
 
                 } catch (NumberFormatException e) {
@@ -64,11 +68,12 @@ public class chatGUI  extends JFrame{
         connect();
         initUI();
         startClient(clientSocket);
-        SwingUtilities.invokeLater(this::requestUserList);
+        requestUserList(); /* ha itt meghivom hogy automatiksuan megjelenjen belepskor a user lista, akkor kivetelt dob a szerver */
+
     }
 
     private void initUI() {
-        setTitle("Chat Client");
+        setTitle("Chat Client (Beta)");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(800, 600);
         setMinimumSize(new Dimension(800, 600));
@@ -79,9 +84,7 @@ public class chatGUI  extends JFrame{
 
         messageField = new JTextField();
         chatArea = new JTextPane();
-
         chatArea.setEditable(false);
-
         messageField.setBackground(Color.DARK_GRAY);
         chatArea.setBackground(Color.DARK_GRAY);
         messageField.setForeground(Color.WHITE);
@@ -109,6 +112,20 @@ public class chatGUI  extends JFrame{
                     if(!messageField.getText().trim().equals(""))
                          sendMessageFromTextField();
                 }
+            }
+        });
+
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                if (clientSocket != null && clientSocket.isConnected()) {
+                    try {
+                        clientSocket.close();
+                    } catch (IOException ex) {
+                        ex.printStackTrace();
+                    }
+                }
+                System.exit(0);
             }
         });
 
@@ -160,9 +177,15 @@ public class chatGUI  extends JFrame{
             SwingUtilities.invokeLater(() -> {
                 if(userListModel != null){
                     userListModel.clear();
-                    String[] userArray = users.split(":")[1].split(",");
-                    for (String user : userArray) {
-                        userListModel.addElement(user);
+                    String[] userArray = users.split(":");
+
+                    if (userArray.length > 1)
+                    {
+                         userArray = userArray[1].split(",");
+                         for (String user : userArray)
+                         {
+                             userListModel.addElement(user);
+                         }
                     }
                 }
             });
@@ -178,9 +201,10 @@ public class chatGUI  extends JFrame{
             while(userName.replace(" ", "").equals(""))
             {
                 userName = JOptionPane.showInputDialog(this, "Kérjük, adja meg a nevét:", "Bejelentkezés", JOptionPane.PLAIN_MESSAGE);
+
             }
             sendMessage(clientSocket, "user_info", userName, userName, "server");
-
+            setTitle("Chat Client (Beta) - logged in as "+userName);
             Thread receiveThread = new Thread(() -> receiveMessages(clientSocket));
             receiveThread.start();
             connected = true;
@@ -217,11 +241,7 @@ public class chatGUI  extends JFrame{
 
                 String jsonMessage = new String(buffer, 0, bytesRead, StandardCharsets.UTF_8);
 
-                if ("@exit".equals(jsonMessage.trim())) {
-                    appendToChatArea("Kiléptél a chatből.");
-                    System.exit(0);
-                    break;
-                }
+
                 SwingUtilities.invokeLater(() -> processReceivedJsonMessage(jsonMessage));
             }
         } catch (IOException e) {
@@ -247,7 +267,7 @@ public class chatGUI  extends JFrame{
             String content = jsonObject.getString("content");
             String time = jsonObject.getString("timestamp");
 
-            if ("server".equals(messageType)) {
+            if ("server".equals(messageType) || "server".equals(sender)) {
                     updateUsersList(content);
                     appendToChatArea("[SZERVER] | " + time + ": " + content, Color.orange);
                 }
@@ -262,6 +282,7 @@ public class chatGUI  extends JFrame{
             }
         } catch (Exception e) {
             appendToChatArea("Hiba a JSON üzenet feldolgozása során.");
+            System.out.println("Received JSON: " + jsonMessage);
             e.printStackTrace();
         }
     }
@@ -282,12 +303,14 @@ public class chatGUI  extends JFrame{
             command.add(currentJar.getPath());
             final ProcessBuilder builder = new ProcessBuilder(command);
             builder.start();
+            clientSocket.close();
             System.exit(0);
         }
         catch (Exception ex){
             JOptionPane.showMessageDialog(null, ex.getLocalizedMessage(), "Error", JOptionPane.WARNING_MESSAGE);
         }
     }
+
 
     private void sendMessageFromTextField() {
         String message = "";
@@ -334,7 +357,8 @@ public class chatGUI  extends JFrame{
     public  void printAvailableCommands()
     {
         appendToChatArea("Elérhető parancsok:");
-        appendToChatArea("@exit - Kilépés a chatről+ \n @help - Elérhető parancsok listázása \n @users - Aktív felhasználók listázása \n \"@newName [új név] - Felhasználónév megváltoztatása\"");
+        appendToChatArea("@exit - Kilépés a chatről+ \n @help - Elérhető parancsok listázása \n @users - Aktív felhasználók listázása \n @newName [új név] - Felhasználónév megváltoztatása \n @exit - Kilépés \n @restart - újraindítás ");
+
     }
 
 
@@ -375,28 +399,44 @@ public class chatGUI  extends JFrame{
 
     private void sendMessage(Socket clientSocket, String messageType, String content, String sender, String receiver) {
         try {
-            String timestamp = new SimpleDateFormat("HH:mm:ss").format(new Date());
+            LocalDateTime now = LocalDateTime.now();
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+            String timestamp = now.format(formatter);
             String message = String.format("{\"message_type\":\"%s\",\"content\":\"%s\",\"timestamp\":\"%s\",\"sender\":\"%s\",\"receiver\":\"%s\"}",
                     messageType, content, timestamp, sender, receiver);
 
-            if(content.contains("@newName")){
+            if (content.contains("@newName")) {
                 userName = content.split("@newName")[1];
+                setTitle("Chat Client (Beta) - logged in as "+userName);
             }
+
             PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
             out.println(message);
-            if(messageField != null)
-                 messageField.setText("");
+
+            if (content.equals("@exit")) {
+                appendToChatArea("Kiléptél a chatből.");
+                clientSocket.close();
+                System.exit(0);
+            }
+            if (messageField != null) {
+                messageField.setText("");
+            }
 
         } catch (IOException e) {
             appendToChatArea("Hiba az üzenet küldése során.");
             e.printStackTrace();
         }
     }
+
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
-                new chatGUI().setVisible(true);
+                JFrame frame = new chatGUI();
+                frame.setVisible(true);
+                frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
             }
         });
     }

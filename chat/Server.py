@@ -3,6 +3,8 @@ import random
 import socket
 import threading
 import datetime
+import time
+import traceback
 import mysql.connector
 
 class Message:
@@ -37,9 +39,8 @@ class Message:
 
     
 class User:
-    def __init__(self, name, router, conn):
+    def __init__(self, name, conn):
         self.name = name
-        self.router = router
         self.conn = conn
 
     def send_message(self, message: Message):
@@ -53,11 +54,13 @@ class User:
 class MessageRouter:
     sqlConnection = ""
     cursor = ""
+    messages = []
 
     def __init__(self):
         self.users = []
+        self.messages = []
         self.connectSQL()
-    
+        self.loadMessagesFromDatabase()  
     
     def connectSQL(self):
         try:
@@ -73,15 +76,21 @@ class MessageRouter:
         except:
             print("A MySQL adatbázisra való csatlakozás sikertelen - az üzenetek nem lesznek elmentve! ")
 
-    def loadPreviousMessages(self, user):
-         if self.cursor != "":
-                sql = "SELECT type, content, sender, receiver, time FROM messages"
-                self.cursor.execute(sql)
-                rows = self.cursor.fetchall()
-                for msg in rows:
-                    msg = Message(msg[0], msg[1], msg[4], msg[2], msg[3])
-                    user.send_message(msg)
+    def loadMessagesFromDatabase(self):
+        if self.cursor != "":
+            sql = "SELECT type, content, sender, receiver, time FROM messages"
+            self.cursor.execute(sql)
+            rows = self.cursor.fetchall()
+            for msg in rows:
+                msg = Message(msg[0], msg[1], msg[4], msg[2], msg[3])
+                self.messages.append(msg)
+            print("Üzenetek beolvasva az adatbázisból")  
 
+    def loadPreviousMessages(self, user):
+        for msg in self.messages:
+            time.sleep(0.05)
+            user.send_message(msg)
+        print("Régebbi üzenetek elküldve "+ user.name+" felé ("+str(len(self.messages))+")")  
 
     def add_user(self, user: User):
         try:
@@ -93,14 +102,19 @@ class MessageRouter:
         for user in self.users:
             try:
                 user.send_message(message)
-                if(self.cursor != "" and str.lower(message.message_type) != "sever" and  str.lower(message.sender) != "server"):
-                    sql = "INSERT INTO messages (type, content, sender, receiver) VALUES (%s, %s, %s, %s)"
-                    values = (message.message_type, message.content, message.sender, message.receiver)
-                    self.cursor.execute(sql, values)
-                    self.sqlConnection.commit()
+                if message.message_type != "server" and message.sender != 'server':
+                    self.messages.append(message)  
+                    self.saveMessageToDatabase(message)  
 
             except Exception as ex:
                 print(ex)
+
+    def saveMessageToDatabase(self, message: Message):
+        if self.cursor != "":
+            sql = "INSERT INTO messages (type, content, sender, receiver) VALUES (%s, %s, %s, %s)"
+            values = (message.message_type, message.content, message.sender, message.receiver)
+            self.cursor.execute(sql, values)
+            self.sqlConnection.commit()
 
     def private_message(self, message: Message):
         success = False
@@ -136,6 +150,7 @@ class MessageRouter:
         except Exception as e:
             print(e)
 
+
 def handle_client(conn, addr, router):
     print(f"[NEW CONNECTION] {addr} connected.")
     user = None
@@ -145,55 +160,64 @@ def handle_client(conn, addr, router):
             if not data:
                 break
 
-            msg = json.loads(data)
-            msg = Message.from_json(msg)
+            for raw_msg in data.split("\n"):
+                if not raw_msg.strip():
+                    continue
 
+                msg = json.loads(raw_msg)
+                msg = Message.from_json(msg)
 
-            if msg.message_type == "user_info":
-                if any(existing_user.name == msg.content for existing_user in router.users):
-                    msg.content += str(random.randint(100, 999))
+                if msg.message_type == "user_info":
+                    if any(existing_user.name == msg.content for existing_user in router.users):
+                        msg.content += str(random.randint(100, 999))
 
-                if not user:
-                    user = User(msg.content, router, conn)
-                    router.add_user(user)
-                    welcome_message = Message('server', user.name +" csatlakozott. Üdv, "+user.name+"!", datetime.datetime.now(), 'server', user.name)
-                    router.broadcast_message(welcome_message)
-                    print(f"{user.name} has been authenticated")
-                    router.loadPreviousMessages(user)
+                    if not user:
+                        user = User(msg.content, conn)
+                        router.add_user(user)
+                        welcome_message = Message('server', user.name +" csatlakozott. Üdv, "+user.name+"!", datetime.datetime.now(), 'server', user.name)
+                        router.broadcast_message(welcome_message)
+                        print(f"{user.name} has been authenticated")
+                        router.loadPreviousMessages(user)
 
-            else:
-                if msg.content == '@exit':
-                    handle_user_disconnect(user, conn, router)
-                    break
-
-                if msg.message_type == 'private':           
-                    if msg.sender != msg.receiver:
-                        router.private_message(msg)
-                    else:
-                        router.private_message(Message("private",
-                                    "Hiba: Magadnak nem küldhetsz privát üzenetet! :) ", datetime.datetime.now(), "[SZERVER]", msg.sender))
-
-                elif msg.content == "@users":
-                    active_users = [user.name for user in router.users]
-                    list_message = Message('server', f'Aktív felhasználók: {", ".join(active_users)}',datetime.datetime.now() , 'server', user.name)
-                    user.send_message(list_message)
-
-                elif msg.content.startswith('@newName'):
-                    new_name = msg.content.split(' ', 1)[1]
-                    handle_user_name_change(user, new_name, router)
                 else:
-                    broadcast_message = Message('public', msg.content, msg.timestamp, user.name, 'all')
-                    router.broadcast_message(broadcast_message)
+                    if msg.content == '@exit':
+                        handle_user_disconnect(user, conn, router)
+                        break
 
-    except ConnectionAbortedError:
-        print(f"[CONNECTION ABORTED] {addr} kapcsolata megszakadt.")
-    except IOError as e: # proba miatt
+                    if msg.message_type == 'private':           
+                        if msg.sender != msg.receiver:
+                            router.private_message(msg)
+                        else:
+                            router.private_message(Message("private",
+                                        "Hiba: Magadnak nem küldhetsz privát üzenetet! :) ", datetime.datetime.now(), "[SZERVER]", msg.sender))
+
+                    elif msg.content == "@users":
+                        active_users = [user.name for user in router.users]
+                        list_message = Message('server', f'Aktív felhasználók: {", ".join(active_users)}',datetime.datetime.now() , 'server', user.name)
+                        user.send_message(list_message)
+
+                    elif msg.content.startswith('@newName'):
+                        new_name = msg.content.split(' ', 1)[1]
+                        handle_user_name_change(user, new_name, router)
+                    else:
+                        broadcast_message = Message('public', msg.content, msg.timestamp, user.name, 'all')
+                        router.broadcast_message(broadcast_message)
+                
+
+    except json.decoder.JSONDecodeError as ex:
+        print(f"Hibás JSON üzenet érkezett: {data} \n {msg}")
+        print(ex)
+        traceback.print_exc()
+
+    except Exception as e:
         print(f"[ERROR] Hiba a kapcsolat kezelése közben: {e}")
+    
     finally:
-        if user:
-            handle_user_disconnect(user, conn, router)
-        print(f"[CONNECTION CLOSED] {addr} kapcsolata lezárva.")
+        handle_user_disconnect(user, conn, router)
+        print(f"[CONNECTION CLOSED] {addr} kibannolva.")
 
+                   
+       
 def handle_user_disconnect(user, conn, router):
     if user:
         disconnect_message = Message('server', f'<{user.name}> kilépett.', datetime.datetime.now(), 'server', user.name)
