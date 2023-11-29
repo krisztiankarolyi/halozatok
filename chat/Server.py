@@ -6,6 +6,7 @@ import datetime
 import time
 import traceback
 import mysql.connector
+import re
 
 class Message:
     def __init__(self, message_type, content, timestamp ,sender, receiver):
@@ -167,19 +168,28 @@ def handle_client(conn, addr, router):
                 msg = json.loads(raw_msg)
                 msg = Message.from_json(msg)
 
-                if msg.message_type == "user_info":
-                    if any(existing_user.name == msg.content for existing_user in router.users):
-                        msg.content += str(random.randint(100, 999))
+                if not user:              
+                    if msg.message_type == "user_info":
+                        if any(existing_user.name == msg.content for existing_user in router.users):
+                            msg.content += str(random.randint(100, 999))
 
-                    if not user:
-                        user = User(msg.content, conn)
+                        name = re.sub(r'[^a-zA-Z0-9 ]', '', msg.content)
+                        user = User(name, conn)
                         router.add_user(user)
                         welcome_message = Message('server', user.name +" csatlakozott. Üdv, "+user.name+"!", datetime.datetime.now(), 'server', user.name)
                         router.broadcast_message(welcome_message)
                         print(f"{user.name} has been authenticated")
                         router.loadPreviousMessages(user)
 
+                    else:
+                        print(f"Message from unauthenticated user")
+                        authentication_required_message = Message('server', "Autentikálja magát először!", datetime.datetime.now(), 'server', 'unknown')
+                        conn.send(authentication_required_message.to_json().encode('utf-8'))
+                        conn.close()
+                        continue
+
                 else:
+
                     if msg.content == '@exit':
                         handle_user_disconnect(user, conn, router)
                         break
@@ -210,7 +220,7 @@ def handle_client(conn, addr, router):
         traceback.print_exc()
 
     except Exception as e:
-        print(f"[ERROR] Hiba a kapcsolat kezelése közben: {e}")
+        print(f"[ERROR] Hiba a kapcsolat kezelése közben: {e} ")
     
     finally:
         handle_user_disconnect(user, conn, router)
