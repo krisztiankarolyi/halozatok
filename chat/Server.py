@@ -57,9 +57,11 @@ class MessageRouter:
     cursor = ""
     messages = []
 
-    def __init__(self):
+    def __init__(self, max_messages, history_limit):
         self.users = []
         self.messages = []
+        self.history_limit = history_limit
+        self.max_messages = max_messages  # Új paraméter hozzáadása
         self.connectSQL()
         self.loadMessagesFromDatabase()  
     
@@ -79,7 +81,7 @@ class MessageRouter:
 
     def loadMessagesFromDatabase(self):
         if self.cursor != "":
-            sql = "SELECT type, content, sender, receiver, time FROM messages"
+            sql = "SELECT type, content, sender, receiver, time FROM messages limit "+str(self.history_limit)
             self.cursor.execute(sql)
             rows = self.cursor.fetchall()
             for msg in rows:
@@ -112,10 +114,24 @@ class MessageRouter:
 
     def saveMessageToDatabase(self, message: Message):
         if self.cursor != "":
+            # Először töröld a régi üzeneteket, ha túl sok van
+            self.trimOldMessages()
+            
+            # Most már hozzáadhatod az új üzenetet
             sql = "INSERT INTO messages (type, content, sender, receiver) VALUES (%s, %s, %s, %s)"
             values = (message.message_type, message.content, message.sender, message.receiver)
             self.cursor.execute(sql, values)
             self.sqlConnection.commit()
+
+    def trimOldMessages(self):
+        if len(self.messages) > self.max_messages:
+            self.messages = self.messages[-self.max_messages:]
+            # Töröld az összes üzenetet az adatbázisból
+            self.cursor.execute("DELETE FROM messages")
+            self.sqlConnection.commit()
+            # Most pedig mentsd el csak a legutolsó üzeneteket
+            for msg in self.messages:
+                self.saveMessageToDatabase(msg)
 
     def private_message(self, message: Message):
         success = False
@@ -246,9 +262,9 @@ def handle_user_name_change(user, new_name, router):
         error_message = Message('server', 'Ez a név már foglalt. Válassz másikat!', datetime.datetime.now(), 'server', user.name)
         user.send_message(error_message)
 
-def start_server(host, port):
+def start_server(host, port, max_messages, history_limit):
     try:
-        router = MessageRouter()
+        router = MessageRouter(max_messages, history_limit)
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((host, port))
         server_socket.listen()
@@ -263,7 +279,4 @@ def start_server(host, port):
         print(e)
 
 if __name__ == "__main__":
-    start_server("0.0.0.0", 400)
-
-
-
+    start_server("0.0.0.0", 400, 10, 10)
