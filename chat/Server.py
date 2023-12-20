@@ -81,13 +81,14 @@ class MessageRouter:
 
     def loadMessagesFromDatabase(self):
         if self.cursor != "":
-            sql = "SELECT type, content, sender, receiver, time FROM messages limit "+str(self.history_limit)
+            sql = f"SELECT type, content, sender, receiver, time FROM messages ORDER BY time DESC LIMIT {self.history_limit}"
             self.cursor.execute(sql)
             rows = self.cursor.fetchall()
             for msg in rows:
                 msg = Message(msg[0], msg[1], msg[4], msg[2], msg[3])
-                self.messages.append(msg)
-            print("Üzenetek beolvasva az adatbázisból")  
+                if msg.message_type == 'public' and msg.sender != msg.content:
+                    self.messages.append(msg)
+            print("Üzenetek beolvasva az adatbázisból")
 
     def loadPreviousMessages(self, user):
         user.send_message(Message("private", "Loading previous messages...",  datetime.datetime.now(), "server", user.name))
@@ -106,7 +107,7 @@ class MessageRouter:
         for user in self.users:
             try:
                 user.send_message(message)
-                if message.message_type != "server" and message.sender != 'server':
+                if message.message_type != "server" and message.sender != 'server' and message.message_type != "user_info" and message.sender != message.content:
                     self.messages.append(message)  
                     self.saveMessageToDatabase(message)  
 
