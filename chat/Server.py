@@ -90,6 +90,7 @@ class MessageRouter:
             print("Üzenetek beolvasva az adatbázisból")  
 
     def loadPreviousMessages(self, user):
+        user.send_message(Message("private", "Loading previous messages...",  datetime.datetime.now(), "server", user.name))
         for msg in self.messages:
             time.sleep(0.05)
             user.send_message(msg)
